@@ -1,138 +1,125 @@
-# %%
-
 import os
 
-# Load the data
-# "C:\Work\sgndataset\train\""
-
-# Extract class_names from directories inside the main one
-# r"C:\Work\sgndataset\train\"
-class_names = sorted(os.listdir("./train"))
-
-# %%
-
-from tensorflow.keras.applications.mobilenet import MobileNet
-
-# Base model, without the top layer, just the convolutional layers
-base_model = MobileNet(input_shape=(224, 224, 3), include_top=False)
-
-# base_model.summary()
-
-# %%
-
-import tensorflow
-
-in_tensor = base_model.inputs[0]
-out_tensor = base_model.outputs[0]
-
-# Add one player
-out_tensor = tensorflow.keras.layers.GlobalAveragePooling2D()(out_tensor)
-
-# Full model defined by enpoints
-model = tensorflow.keras.models.Model(inputs=[in_tensor], outputs=[out_tensor])
-
-# Compile the model for execution. Losses and optimizers
-# can be anything here, since we don’t train the model.
-model.compile(loss="categorical_crossentropy", optimizer='sgd')
-# model.summary()
-
-# %%
-
-import matplotlib.pyplot as plt
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow.keras
+from sklearn.model_selection import train_test_split
+from tensorflow.keras import backend as K
+from tensorflow.keras.applications import MobileNet
+from tensorflow.keras.applications.mobilenet import preprocess_input
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.models import Model
+from tqdm import tqdm
 
+from tensorflow.keras.applications.vgg16 import VGG16
+
+
+def build_model():
+    base_model = VGG16(input_shape=(224, 224, 3),
+                       weights='imagenet',
+                       include_top=False)  # imports the mobilenet model and discards the last 1000 neuron layer.
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(1024, activation='relu')(
+        x)  # we add dense layers so that the model can learn more complex functions and classify for better results.
+    x = Dense(1024, activation='relu')(x)  # dense layer 2
+    x = Dense(512, activation='relu')(x)  # dense layer 3
+    preds = Dense(len(class_names), activation='softmax')(x)  # final layer with softmax activation
+    model = Model(inputs=base_model.input, outputs=preds)
+    return model
+
+
+def predict_one(model):
+    image_batch = X_test[:5]
+    classes_batch = y_test[:5]
+    predicted_batch = model.predict(image_batch)
+    for k in range(0, image_batch.shape[0]):
+        image = image_batch[k]
+        pred = predicted_batch[k]
+        the_pred = np.argmax(pred)
+        predicted = class_names[the_pred]
+        val_pred = max(pred)
+        the_class = np.argmax(classes_batch[k])
+        value = class_names[np.argmax(classes_batch[k])]
+        plt.figure(k)
+        isTrue = (the_pred == the_class)
+        plt.title(str(isTrue) + ' - class: ' + value + ' - ' + 'predicted: ' + predicted + '[' + str(val_pred) + ']')
+        plt.imshow(image)
+        plt.show()
+
+
+gpu_options = tensorflow.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.333, allow_growth=True)
+sess = tensorflow.compat.v1.Session(
+    config=tensorflow.compat.v1.ConfigProto(log_device_placement=True, gpu_options=gpu_options))
+
+class_names = sorted(os.listdir("./train/train"))
 # Get all images
 X = []
 y = []
-location = "./train"
+location = "./train/train"
 for root, dirs, files in os.walk(location):
-    for name in files:
+    print(root.split(os.sep)[-1])
+    for name in tqdm(files):
         if name.endswith(".jpg"):
             # Load the image
             img = plt.imread(root + os.sep + name)
-
-            # Resize (consider zeropadding)
             img = cv2.resize(img, (224, 224))
-
-            # Convert data to float and extacrt mean (this is how the network was trained)
             img = img.astype(np.float32)
-            img -= 128
-
-            # Push data through the model
-            x = model.predict(img[np.newaxis, ...])[0]
-
-            # Add the feature vector to our list
-            X.append(x)
-
+            # Resize (consider zeropadding)
+            img = preprocess_input(img)
+            X.append(img)
             # Extract class name from the directory name
             label = root.split(os.sep)[-1]
             y.append(class_names.index(label))
-
-            print(label)
 
 # Cast the python lists to a numpy array.
 X = np.array(X)
 y = np.array(y)
 
-print(X, y)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=0)
+# image = Image.open("./train/train/Ambulance/000040_09.jpg")
+# imgplot = plt.imshow(image)
+# plt.show()
+print(class_names)
+epochs = 25
+batch_size = 32
+K.set_learning_phase(1)
+model = build_model()
+model.compile(optimizer='Adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-# %%
+early_stop = EarlyStopping(monitor='val_loss', patience=8, verbose=1, min_delta=1e-4)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=4, verbose=1, min_delta=1e-4)
+callbacks_list = [early_stop, reduce_lr]
+# with tensorflow.device('/GPU:0'):
+model_history = model.fit(x=X_train,
+                          y=y_train,
+                          batch_size=batch_size,
+                          epochs=epochs,
+                          validation_data=(X_test, y_test),
+                          callbacks=callbacks_list)
 
-# Classify using different models
-from sklearn.model_selection import train_test_split
+model.evaluate(X_test, y_test, steps=None, max_queue_size=10, workers=1, use_multiprocessing=False)
+pred = model.predict(X_test, batch_size=batch_size, max_queue_size=10, workers=1,
+                     use_multiprocessing=False, verbose=1)
+predicted = np.argmax(pred, axis=1)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-
-result = []
-# Add others?
-models = [LinearDiscriminantAnalysis(),
-          SVC(kernel='linear'),
-          SVC(kernel='rbf'),
-          LogisticRegression(),
-          RandomForestClassifier(n_estimators=100)]
-with tensorflow.device('/GPU:0'):
-    for model in models:
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-        result.append(sklearn.metrics.accuracy_score(y_test, y_pred))
-
-best_loc = np.argmax(result)
-
-print("Best classifier: ", type(models[best_loc]).__name__)
-print(results)
-
-# %%
-
-# Create submission file
-best_model = models[best_loc]
-best_model.fit(X, y)
 with open("submissions.csv", "w") as fp:
     fp.write("Id,Category\n")
-
-    for root, dirs, files in os.walk("C:\\Work\\sgndataset\\testset"):
-        for name in files:
+    print("Testing results\n")
+    for root, dirs, files in os.walk("./test/testset"):
+        for name in tqdm(files):
             if name.endswith(".jpg"):
                 # Load the image
                 img = plt.imread(root + os.sep + name)
-
-                # Resize (consider zero padding)
                 img = cv2.resize(img, (224, 224))
-
-                # Convert data to float and extacrt mean (this is how the network was trained)
                 img = img.astype(np.float32)
-                img -= 128
-
+                # Resize (consider zeropadding)
+                img = preprocess_input(img)
                 # Push data through the model to get prediction index i
-                i = best_model.predict(img[np.newaxis, ...])[0]
-
-                # Class id to name
+                res = model.predict(img[np.newaxis, ...])
+                i = np.argmax(res)
                 label = class_names[i]
                 ind = name.split('.')[0]
-                fp.write("%d,%s\n" % (ind, label))
-
+                fp.write("%s,%s\n" % (ind, label))

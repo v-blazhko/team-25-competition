@@ -1,3 +1,7 @@
 test/
+venv/
+weights/
 train/
+cudnn-10.2-windows10-x64-v7.6.5.32/
+full-keras-pretrained-no-top/
 vehicle.zip

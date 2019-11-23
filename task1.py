@@ -12,6 +12,8 @@ from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.layers import Activation, Dense
 from tensorflow.keras.models import Model
 
+from tqdm import tqdm
+import time
 
 def build_model():
     base_model = densenet.DenseNet121(input_shape=(224, 224, 3),
@@ -49,6 +51,7 @@ def predict_one(model):
         isTrue = (the_pred == the_class)
         plt.title(str(isTrue) + ' - class: ' + value + ' - ' + 'predicted: ' + predicted + '[' + str(val_pred) + ']')
         plt.imshow(image)
+        plt.show()
 
 
 class_names = sorted(os.listdir("./train/train"))
@@ -58,7 +61,8 @@ y = []
 location = "./train/train"
 with tensorflow.device('/GPU:0'):
     for root, dirs, files in os.walk(location):
-        for name in files[0::200]:
+        print(root.split(os.sep)[-1])
+        for name in tqdm(files):
             if name.endswith(".jpg"):
                 # Load the image
                 img = plt.imread(root + os.sep + name)
@@ -66,7 +70,8 @@ with tensorflow.device('/GPU:0'):
                 img = cv2.resize(img, (224, 224))
                 # Convert data to float and extacrt mean (this is how the network was trained)
                 img = img.astype(np.float32)
-                img -= 128
+                # img -= 128
+                img = img / 255
                 X.append(img)
                 # Extract class name from the directory name
                 label = root.split(os.sep)[-1]
@@ -81,7 +86,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 # imgplot = plt.imshow(image)
 # plt.show()
 print(class_names)
-epochs = 10
+epochs = 40
 batch_size = 32
 K.set_learning_phase(1)
 model = build_model()
@@ -91,45 +96,45 @@ reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=4, verbos
 callbacks_list = [early_stop, reduce_lr]
 model_history = model.fit(x=X_train,
                           y=y_train,
+                          batch_size=batch_size,
                           epochs=epochs,
                           validation_data=(X_test, y_test),
-                          validation_steps=len(y_test) // batch_size,
                           callbacks=callbacks_list)
 
-plt.figure(0)
-plt.plot(model_history.history['acc'], 'r')
-plt.plot(model_history.history['val_acc'], 'g')
-plt.xticks(np.arange(0, 20, 1.0))
-plt.rcParams['figure.figsize'] = (8, 6)
-plt.xlabel("Num of Epochs")
-plt.ylabel("Accuracy")
-plt.title("Training Accuracy vs Validation Accuracy")
-plt.legend(['train', 'validation'])
-
-plt.figure(1)
-plt.plot(model_history.history['loss'], 'r')
-plt.plot(model_history.history['val_loss'], 'g')
-plt.xticks(np.arange(0, 20, 1.0))
-plt.rcParams['figure.figsize'] = (8, 6)
-plt.xlabel("Num of Epochs")
-plt.ylabel("Loss")
-plt.title("Training Loss vs Validation Loss")
-plt.legend(['train', 'validation'])
-
-plt.figure(2)
-plt.plot(model_history.history['mean_squared_error'], 'r')
-plt.plot(model_history.history['val_mean_squared_error'], 'g')
-plt.xticks(np.arange(0, 20, 1.0))
-plt.rcParams['figure.figsize'] = (8, 6)
-plt.xlabel("Num of Epochs")
-plt.ylabel("MSE")
-plt.title("Training Loss vs Validation Loss")
-plt.legend(['train', 'validation'])
-
-plt.show()
+# plt.figure(0)
+# plt.plot(model_history.history['acc'], 'r')
+# plt.plot(model_history.history['val_acc'], 'g')
+# plt.xticks(np.arange(0, 20, 1.0))
+# plt.rcParams['figure.figsize'] = (8, 6)
+# plt.xlabel("Num of Epochs")
+# plt.ylabel("Accuracy")
+# plt.title("Training Accuracy vs Validation Accuracy")
+# plt.legend(['train', 'validation'])
+# 
+# plt.figure(1)
+# plt.plot(model_history.history['loss'], 'r')
+# plt.plot(model_history.history['val_loss'], 'g')
+# plt.xticks(np.arange(0, 20, 1.0))
+# plt.rcParams['figure.figsize'] = (8, 6)
+# plt.xlabel("Num of Epochs")
+# plt.ylabel("Loss")
+# plt.title("Training Loss vs Validation Loss")
+# plt.legend(['train', 'validation'])
+# 
+# plt.figure(2)
+# plt.plot(model_history.history['mean_squared_error'], 'r')
+# plt.plot(model_history.history['val_mean_squared_error'], 'g')
+# plt.xticks(np.arange(0, 20, 1.0))
+# plt.rcParams['figure.figsize'] = (8, 6)
+# plt.xlabel("Num of Epochs")
+# plt.ylabel("MSE")
+# plt.title("Training Loss vs Validation Loss")
+# plt.legend(['train', 'validation'])
+# 
+# plt.show()
 
 model.evaluate(X_test, y_test, steps=None, max_queue_size=10, workers=1, use_multiprocessing=False)
-pred = model.predict(X_test, y_test, steps=None, max_queue_size=10, workers=1,
+pred = model.predict(X_test, batch_size=batch_size, max_queue_size=10, workers=1,
                      use_multiprocessing=False, verbose=1)
 predicted = np.argmax(pred, axis=1)
 
