@@ -15,7 +15,7 @@ from tensorflow.keras.models import Model
 from tqdm import tqdm
 from tensorflow.keras.applications.inception_resnet_v2 import InceptionResNetV2
 
-test = True
+test = False
 model_name = 'InceptionResNetV2'
 
 def build_model():
@@ -54,7 +54,7 @@ else:
     epochs = 32
     X_size = 1
 
-gpu_options = tensorflow.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.333, allow_growth=True)
+gpu_options = tensorflow.compat.v1.GPUOptions(allow_growth=True)
 sess = tensorflow.compat.v1.Session(
     config=tensorflow.compat.v1.ConfigProto(log_device_placement=True, gpu_options=gpu_options))
 
@@ -106,7 +106,7 @@ pred = model.predict(X_test, batch_size=batch_size, max_queue_size=10, workers=1
                      use_multiprocessing=False, verbose=1)
 predicted = np.argmax(pred, axis=1)
 
-with open("submissions.csv", "w") as fp:
+with open("submissions" + model_name + ".csv", "w") as fp:
     fp.write("Id,Category\n")
     print("Testing results\n")
     for root, dirs, files in os.walk("./test/testset"):

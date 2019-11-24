@@ -14,7 +14,7 @@ from tensorflow.keras.layers import Dropout
 from tensorflow.keras.models import Model
 from tqdm import tqdm
 
-test = True
+test = False
 
 def build_model():
     base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
@@ -49,10 +49,10 @@ if test:
     epochs = 5
     X_size = 600
 else:
-    epochs = 32
+    epochs = 15
     X_size = 1
 
-gpu_options = tensorflow.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.333, allow_growth=True)
+gpu_options = tensorflow.compat.v1.GPUOptions(allow_growth=True)
 sess = tensorflow.compat.v1.Session(
     config=tensorflow.compat.v1.ConfigProto(log_device_placement=True, gpu_options=gpu_options))
 
